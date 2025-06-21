@@ -1,0 +1,17 @@
+whisper-env/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.mp3
+*.tsv
+*.srt
+*.vtt
+*.json
+*.mp4whisper-env/
+whisper-env/
+.DS_Store
+*.pyc
+__pycache__/
+.envwhisper-env/
+.env
