@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Twitter Space AI Assistant</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        body {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        .main-container {
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 20px;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+            backdrop-filter: blur(10px);
+        }
+        .header {
+            background: linear-gradient(45deg, #1da1f2, #0d8bd9);
+            color: white;
+            border-radius: 20px 20px 0 0;
+            padding: 2rem;
+        }
+        .content-section {
+            padding: 2rem;
+        }
+        .btn-primary {
+            background: linear-gradient(45deg, #1da1f2, #0d8bd9);
+            border: none;
+            border-radius: 25px;
+            padding: 12px 30px;
+            font-weight: 600;
+        }
+        .btn-primary:hover {
+            background: linear-gradient(45deg, #0d8bd9, #1da1f2);
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(29, 161, 242, 0.4);
+        }
+        .transcript-box {
+            background: #f8f9fa;
+            border-radius: 15px;
+            padding: 1.5rem;
+            border-left: 5px solid #1da1f2;
+            margin: 1rem 0;
+        }
+        .questions-box {
+            background: #e3f2fd;
+            border-radius: 15px;
+            padding: 1.5rem;
+            border-left: 5px solid #2196f3;
+            margin: 1rem 0;
+        }
+        .recording-indicator {
+            animation: pulse 2s infinite;
+        }
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.5; }
+            100% { opacity: 1; }
+        }
+        .form-control, .form-select {
+            border-radius: 10px;
+            border: 2px solid #e9ecef;
+        }
+        .form-control:focus, .form-select:focus {
+            border-color: #1da1f2;
+            box-shadow: 0 0 0 0.2rem rgba(29, 161, 242, 0.25);
+        }
+    </style>
+</head>
+<body>
+    <div class="container-fluid py-4">
+        <div class="row justify-content-center">
+            <div class="col-lg-10 col-xl-8">
+                <div class="main-container">
+                    <div class="header text-center">
+                        <h1><i class="fab fa-twitter me-3"></i>Twitter Space AI Assistant</h1>
+                        <p class="mb-0">Your intelligent conversation companion</p>
+                    </div>
+                    
+                    <div class="content-section">
+                        <!-- Topic Input -->
+                        <div class="mb-4">
+                            <label for="topic" class="form-label fw-bold">
+                                <i class="fas fa-tag me-2"></i>Topic (Namespace)
+                            </label>
+                            <input type="text" class="form-control" id="topic" placeholder="Enter topic for this session" value="default">
+                        </div>
+
+                        <!-- Clear Data Button -->
+                        <div class="mb-4">
+                            <button class="btn btn-outline-danger" id="clearData">
+                                <i class="fas fa-trash me-2"></i>Clear Previous Data for This Topic
+                            </button>
+                        </div>
+
+                        <!-- PDF Upload -->
+                        <div class="mb-4">
+                            <label for="pdfUpload" class="form-label fw-bold">
+                                <i class="fas fa-file-pdf me-2"></i>Upload Context PDF
+                            </label>
+                            <input type="file" class="form-control" id="pdfUpload" accept=".pdf">
+                        </div>
+
+                        <!-- Custom Prompt -->
+                        <div class="mb-4">
+                            <label for="customPrompt" class="form-label fw-bold">
+                                <i class="fas fa-comment-dots me-2"></i>Optional Prompt (Guides Question Generation)
+                            </label>
+                            <textarea class="form-control" id="customPrompt" rows="4" placeholder="Enter custom prompt to guide question generation..."></textarea>
+                        </div>
+
+                        <!-- Start/Stop Button -->
+                        <div class="text-center mb-4">
+                            <button class="btn btn-primary btn-lg" id="startButton">
+                                <i class="fas fa-microphone me-2"></i>Start Listening
+                            </button>
+                        </div>
+
+                        <!-- Status Indicator -->
+                        <div class="text-center mb-4" id="statusIndicator" style="display: none;">
+                            <div class="recording-indicator">
+                                <i class="fas fa-circle text-danger me-2"></i>
+                                <span class="fw-bold">Recording...</span>
+                            </div>
+                        </div>
+
+                        <!-- Transcript Display -->
+                        <div class="transcript-box" id="transcriptDisplay" style="display: none;">
+                            <h5><i class="fas fa-file-alt me-2"></i>Latest Transcript</h5>
+                            <div id="transcriptContent" class="mt-2"></div>
+                        </div>
+
+                        <!-- Questions Display -->
+                        <div class="questions-box" id="questionsDisplay" style="display: none;">
+                            <h5><i class="fas fa-question-circle me-2"></i>Smart Questions</h5>
+                            <div id="questionsContent" class="mt-2"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="/static/script.js"></script>
+</body>
+</html> 
