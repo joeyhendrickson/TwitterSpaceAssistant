@@ -3,8 +3,6 @@ import streamlit as st
 import time
 from uuid import uuid4
 from PyPDF2 import PdfReader
-from openai import OpenAI
-from pinecone import Pinecone
 from dotenv import load_dotenv
 
 # --- STREAMLIT UI ---
@@ -15,28 +13,70 @@ load_dotenv()
 openai_api_key = os.getenv("OPENAI_API_KEY")
 pinecone_api_key = os.getenv("PINECONE_API_KEY")
 pinecone_env = os.getenv("PINECONE_ENV", "us-east-1")
-pinecone_index_name = "it-martini-web"
 
-# --- INIT OPENAI + PINECONE ---
-client = OpenAI(api_key=openai_api_key)
-pc = Pinecone(api_key=pinecone_api_key)
+# Check if API keys are available
+if not openai_api_key or not pinecone_api_key:
+    st.error("🚨 **Configuration Error**")
+    st.markdown("""
+    This app requires API keys to function. Please set up the following environment variables in your Streamlit Cloud deployment:
+    
+    **Required Environment Variables:**
+    - `OPENAI_API_KEY` - Your OpenAI API key
+    - `PINECONE_API_KEY` - Your Pinecone API key
+    - `PINECONE_ENV` - Your Pinecone environment (default: us-east-1)
+    
+    **How to set them:**
+    1. Go to your Streamlit Cloud dashboard
+    2. Click on your app
+    3. Go to "Settings" → "Secrets"
+    4. Add the environment variables
+    5. Redeploy your app
+    
+    **Example secrets format:**
+    ```
+    OPENAI_API_KEY = "sk-your-openai-key-here"
+    PINECONE_API_KEY = "your-pinecone-key-here"
+    PINECONE_ENV = "us-east-1"
+    ```
+    """)
+    st.stop()
 
-# Check if index exists, if not create it
+# Initialize API clients
 try:
-    index = pc.Index(pinecone_index_name)
-except Exception:
-    # Index doesn't exist, create it
-    from pinecone import ServerlessSpec
-    pc.create_index(
-        name=pinecone_index_name,
-        dimension=1536,
-        metric="cosine",
-        spec=ServerlessSpec(
-            cloud="aws",
-            region="us-east-1"
+    from openai import OpenAI
+    from pinecone import Pinecone
+    
+    client = OpenAI(api_key=openai_api_key)
+    pc = Pinecone(api_key=pinecone_api_key)
+    
+    pinecone_index_name = "it-martini-web"
+    
+    # Check if index exists, if not create it
+    try:
+        index = pc.Index(pinecone_index_name)
+    except Exception:
+        # Index doesn't exist, create it
+        from pinecone import ServerlessSpec
+        pc.create_index(
+            name=pinecone_index_name,
+            dimension=1536,
+            metric="cosine",
+            spec=ServerlessSpec(
+                cloud="aws",
+                region="us-east-1"
+            )
         )
-    )
-    index = pc.Index(pinecone_index_name)
+        index = pc.Index(pinecone_index_name)
+        
+except Exception as e:
+    st.error(f"🚨 **Connection Error**: {str(e)}")
+    st.markdown("""
+    There was an error connecting to the AI services. Please check:
+    1. Your API keys are correct
+    2. Your internet connection
+    3. The services are available
+    """)
+    st.stop()
 
 def chunk_text(text, max_tokens=500):
     words = text.split()
@@ -107,6 +147,7 @@ Generate 10 intelligent, technology-focused questions that will help move the co
     )
     return response.choices[0].message.content.strip()
 
+# Main app interface
 st.title("🍸 IT Martini")
 st.markdown("**Your AI-powered conversation partner for technology discussions**")
 
@@ -117,17 +158,23 @@ with st.sidebar:
     topic = st.text_input("Conversation Topic", value="technology-discussion")
     
     if st.button("🗑️ Clear Previous Data"):
-        index.delete(delete_all=True, namespace=topic)
-        st.success(f"Topic '{topic}' cleared.")
+        try:
+            index.delete(delete_all=True, namespace=topic)
+            st.success(f"Topic '{topic}' cleared.")
+        except Exception as e:
+            st.error(f"Error clearing data: {str(e)}")
     
     st.markdown("---")
     st.markdown("### 📚 Context")
     uploaded_file = st.file_uploader("Upload Context PDF", type="pdf")
     if uploaded_file:
-        pdf = PdfReader(uploaded_file)
-        raw_text = "\n".join([page.extract_text() for page in pdf.pages])
-        embed_and_upsert(raw_text, topic)
-        st.success("PDF uploaded and embedded.")
+        try:
+            pdf = PdfReader(uploaded_file)
+            raw_text = "\n".join([page.extract_text() for page in pdf.pages])
+            embed_and_upsert(raw_text, topic)
+            st.success("PDF uploaded and embedded.")
+        except Exception as e:
+            st.error(f"Error processing PDF: {str(e)}")
     
     custom_prompt = st.text_area("Custom Prompt (optional)", height=100, 
                                 placeholder="Add any specific guidance for question generation...")
@@ -152,17 +199,20 @@ with col1:
     if st.button("🍸 Generate Questions", type="primary"):
         if conversation_text.strip():
             with st.spinner("Generating intelligent questions..."):
-                # Store conversation context
-                embed_and_upsert(conversation_text, topic)
-                
-                # Generate questions
-                questions = generate_questions(conversation_text, topic, custom_prompt)
-                
-                # Store in session state
-                st.session_state.last_questions = questions
-                st.session_state.last_conversation = conversation_text
-                
-            st.success("Questions generated successfully!")
+                try:
+                    # Store conversation context
+                    embed_and_upsert(conversation_text, topic)
+                    
+                    # Generate questions
+                    questions = generate_questions(conversation_text, topic, custom_prompt)
+                    
+                    # Store in session state
+                    st.session_state.last_questions = questions
+                    st.session_state.last_conversation = conversation_text
+                    
+                    st.success("Questions generated successfully!")
+                except Exception as e:
+                    st.error(f"Error generating questions: {str(e)}")
         else:
             st.error("Please enter some conversation text first.")
 
