@@ -55,8 +55,8 @@ try:
     client = OpenAI(api_key=openai_api_key)
     pc = Pinecone(api_key=pinecone_api_key)
 
-    # LinkedIn Call specific index
-    linkedin_index_name = "linkedin-call-assistant-web"
+    # LinkedIn Call specific index - use shared index with namespace
+    linkedin_index_name = "conversation-assistant-shared"
 
     # Check if index exists, if not create it
     try:
@@ -124,11 +124,11 @@ def embed_and_upsert(text, person_name):
             "id": str(uuid4()),
             "values": vector,
             "metadata": {"text": chunk, "person": person_name}
-        }], namespace=person_name)
+        }], namespace=f"linkedin-{person_name}")
 
 def query_context(query, person_name):
     vector = get_embedding(query)
-    response = index.query(vector=vector, top_k=5, include_metadata=True, namespace=person_name)
+    response = index.query(vector=vector, top_k=5, include_metadata=True, namespace=f"linkedin-{person_name}")
     return "\n".join([match['metadata']['text'] for match in response.matches])
 
 def analyze_linkedin_profile(profile_image=None, profile_text=None):

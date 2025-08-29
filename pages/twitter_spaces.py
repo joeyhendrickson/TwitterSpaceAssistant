@@ -48,8 +48,8 @@ try:
     client = OpenAI(api_key=openai_api_key)
     pc = Pinecone(api_key=pinecone_api_key)
 
-    # Twitter Spaces specific index
-    twitter_index_name = "twitter-assistant-web"
+    # Twitter Spaces specific index - use shared index with namespace
+    twitter_index_name = "conversation-assistant-shared"
 
     # Check if index exists, if not create it
     try:
@@ -106,11 +106,11 @@ def embed_and_upsert(text, topic):
             "id": str(uuid4()),
             "values": vector,
             "metadata": {"text": chunk}
-        }], namespace=topic)
+        }], namespace=f"twitter-{topic}")
 
 def query_context(query, topic):
     vector = get_embedding(query)
-    response = index.query(vector=vector, top_k=5, include_metadata=True, namespace=topic)
+    response = index.query(vector=vector, top_k=5, include_metadata=True, namespace=f"twitter-{topic}")
     return "\n".join([match['metadata']['text'] for match in response.matches])
 
 def summarize_and_append(transcript, topic):

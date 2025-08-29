@@ -49,8 +49,9 @@ try:
     client = OpenAI(api_key=openai_api_key)
     pc = Pinecone(api_key=pinecone_api_key)
     
-    pinecone_index_name = "it-martini-web"
-    
+    # IT Martini specific index - use shared index with namespace
+    pinecone_index_name = "conversation-assistant-shared"
+
     # Check if index exists, if not create it
     try:
         index = pc.Index(pinecone_index_name)
@@ -96,11 +97,11 @@ def embed_and_upsert(text, topic):
             "id": str(uuid4()),
             "values": vector,
             "metadata": {"text": chunk}
-        }], namespace=topic)
+        }], namespace=f"it-martini-{topic}")
 
 def query_context(query, topic):
     vector = get_embedding(query)
-    response = index.query(vector=vector, top_k=5, include_metadata=True, namespace=topic)
+    response = index.query(vector=vector, top_k=5, include_metadata=True, namespace=f"it-martini-{topic}")
     return "\n".join([match['metadata']['text'] for match in response.matches])
 
 def summarize_and_append(transcript, topic):
@@ -159,7 +160,7 @@ with st.sidebar:
     
     if st.button("🗑️ Clear Previous Data"):
         try:
-            index.delete(delete_all=True, namespace=topic)
+            index.delete(delete_all=True, namespace=f"it-martini-{topic}")
             st.success(f"Topic '{topic}' cleared.")
         except Exception as e:
             st.error(f"Error clearing data: {str(e)}")

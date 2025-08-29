@@ -15,19 +15,30 @@ load_dotenv()
 openai_api_key = os.getenv("OPENAI_API_KEY")
 pinecone_api_key = os.getenv("PINECONE_API_KEY")
 pinecone_env = os.getenv("PINECONE_ENV", "us-east-1")
-pinecone_index_name = "twitter-assistant"
 
 # --- INIT OPENAI + PINECONE ---
 client = OpenAI(api_key=openai_api_key)
 pc = Pinecone(api_key=pinecone_api_key)
 
-if pinecone_index_name not in pc.list_indexes().names():
+# Twitter Space specific index - use shared index with namespace
+pinecone_index_name = "conversation-assistant-shared"
+
+# Check if index exists, if not create it
+try:
+    index = pc.Index(pinecone_index_name)
+except Exception:
+    # Index doesn't exist, create it
+    from pinecone import ServerlessSpec
     pc.create_index(
         name=pinecone_index_name,
         dimension=1536,
-        metric="cosine"
+        metric="cosine",
+        spec=ServerlessSpec(
+            cloud="aws",
+            region="us-east-1"
+        )
     )
-index = pc.Index(pinecone_index_name)
+    index = pc.Index(pinecone_index_name)
 
 # --- CONFIG ---
 RECORD_DURATION = 5
@@ -58,11 +69,11 @@ def embed_and_upsert(text, topic):
             "id": str(uuid4()),
             "values": vector,
             "metadata": {"text": chunk}
-        }], namespace=topic)
+        }], namespace=f"twitter-space-{topic}")
 
 def query_context(query, topic):
     vector = get_embedding(query)
-    response = index.query(vector=vector, top_k=5, include_metadata=True, namespace=topic)
+    response = index.query(vector=vector, top_k=5, include_metadata=True, namespace=f"twitter-space-{topic}")
     return "\n".join([match['metadata']['text'] for match in response.matches])
 
 def summarize_and_append(transcript, topic):
@@ -106,7 +117,7 @@ st.title("Twitter Space AI Assistant")
 topic = st.text_input("Enter topic (used as namespace)", value="default")
 
 if st.button("Clear Previous Data for This Topic"):
-    index.delete(delete_all=True, namespace=topic)
+    index.delete(delete_all=True, namespace=f"twitter-space-{topic}")
     st.success(f"Namespace '{topic}' cleared.")
 
 uploaded_file = st.file_uploader("Upload Context PDF", type="pdf")
