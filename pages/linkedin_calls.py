@@ -9,9 +9,6 @@ import requests
 from bs4 import BeautifulSoup
 import re
 import json
-import cv2
-from PIL import Image
-import pytesseract
 
 # Load environment variables
 load_dotenv()
@@ -121,149 +118,19 @@ def query_context(query, person_name):
     response = index.query(vector=vector, top_k=5, include_metadata=True, namespace=person_name)
     return "\n".join([match['metadata']['text'] for match in response.matches])
 
-def analyze_linkedin_profile(profile_image=None):
-    """Analyze LinkedIn profile from uploaded screenshot"""
+def analyze_linkedin_profile(profile_text=None):
+    """Analyze LinkedIn profile from manual text input"""
     try:
-        if profile_image:
-            st.info("🔍 Analyzing LinkedIn profile from uploaded screenshot...")
-            return analyze_linkedin_screenshot(profile_image)
+        if profile_text:
+            st.info("🔍 Analyzing LinkedIn profile from text input...")
+            return parse_linkedin_text_with_ai(profile_text)
         else:
-            st.error("Please upload a profile screenshot")
+            st.error("Please enter profile information")
             return None
             
     except Exception as e:
         st.error(f"Error analyzing LinkedIn profile: {e}")
         return None
-
-
-
-def analyze_multiple_screenshots(uploaded_files):
-    """Analyze multiple LinkedIn profile screenshots for comprehensive data"""
-    try:
-        st.info(f"📸 Processing {len(uploaded_files)} screenshot(s)...")
-        
-        all_ocr_text = []
-        
-        # Process each screenshot
-        for i, uploaded_file in enumerate(uploaded_files):
-            st.info(f"Processing screenshot {i+1}/{len(uploaded_files)}...")
-            
-            # Extract text from each screenshot
-            ocr_text = extract_text_from_image(uploaded_file)
-            if ocr_text:
-                all_ocr_text.append(f"--- Screenshot {i+1} ---\n{ocr_text}")
-            else:
-                st.warning(f"Could not extract text from screenshot {i+1}")
-        
-        if not all_ocr_text:
-            st.error("No text could be extracted from any screenshots")
-            return None
-        
-        # Combine all OCR text
-        combined_text = "\n\n".join(all_ocr_text)
-        st.info(f"📝 Extracted {len(combined_text)} characters from {len(uploaded_files)} screenshot(s)")
-        
-        st.info("🤖 Analyzing combined screenshots with AI...")
-        
-        # Use OpenAI to parse the combined OCR text into structured profile data
-        profile_data = parse_linkedin_text_with_ai(combined_text)
-        
-        if profile_data:
-            st.success(f"✅ Successfully analyzed {len(uploaded_files)} screenshot(s) for {profile_data['name']}")
-            return profile_data
-        else:
-            st.warning("Could not parse profile information from screenshots")
-            return None
-            
-    except Exception as e:
-        st.error(f"Error analyzing multiple screenshots: {e}")
-        return None
-
-
-
-def analyze_linkedin_screenshot(image):
-    """Analyze LinkedIn profile from screenshot using OCR and AI"""
-    try:
-        st.info("📸 Processing LinkedIn profile screenshot...")
-        
-        # Convert image to text using OCR
-        ocr_text = extract_text_from_image(image)
-        
-        if not ocr_text:
-            st.error("Could not extract text from the image")
-            return None
-        
-        st.info("🤖 Analyzing extracted text with AI...")
-        
-        # Use OpenAI to parse the OCR text into structured profile data
-        profile_data = parse_linkedin_text_with_ai(ocr_text)
-        
-        if profile_data:
-            st.success(f"✅ Successfully analyzed screenshot for {profile_data['name']}")
-            return profile_data
-        else:
-            st.warning("Could not parse profile information from screenshot")
-            return create_fallback_profile("screenshot", "unknown")
-            
-    except Exception as e:
-        st.error(f"Error analyzing LinkedIn screenshot: {e}")
-        return None
-
-def extract_text_from_image(image):
-    """Extract text from LinkedIn profile screenshot using OCR"""
-    try:
-        # Convert Streamlit uploaded file to PIL Image
-        if hasattr(image, 'read'):
-            pil_image = Image.open(image)
-        else:
-            pil_image = image
-        
-        # Convert to OpenCV format for preprocessing
-        opencv_image = cv2.cvtColor(np.array(pil_image), cv2.COLOR_RGB2BGR)
-        
-        # Preprocess image for better OCR
-        processed_image = preprocess_image_for_ocr(opencv_image)
-        
-        # Extract text using Tesseract OCR
-        try:
-            # Try with default settings first
-            text = pytesseract.image_to_string(processed_image)
-        except:
-            # Fallback to basic OCR if Tesseract fails
-            text = pytesseract.image_to_string(pil_image)
-        
-        if text.strip():
-            st.info(f"📝 Extracted {len(text)} characters from image")
-            return text
-        else:
-            st.warning("No text found in the image")
-            return None
-            
-    except Exception as e:
-        st.error(f"Error extracting text from image: {e}")
-        return None
-
-def preprocess_image_for_ocr(image):
-    """Preprocess image to improve OCR accuracy"""
-    try:
-        # Convert to grayscale
-        gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-        
-        # Apply noise reduction
-        denoised = cv2.fastNlMeansDenoising(gray)
-        
-        # Apply threshold to get binary image
-        _, binary = cv2.threshold(denoised, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
-        
-        # Apply morphological operations to clean up text
-        kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (2, 2))
-        cleaned = cv2.morphologyEx(binary, cv2.MORPH_CLOSE, kernel)
-        
-        return cleaned
-        
-    except Exception as e:
-        st.error(f"Error preprocessing image: {e}")
-        return image
 
 def parse_linkedin_text_with_ai(ocr_text):
     """Use OpenAI to analyze LinkedIn profile text and provide strategic insights for business calls"""
@@ -896,46 +763,36 @@ def main():
     
     st.info("""
     **Instructions:**
-    1. Open the LinkedIn profile you want to analyze in your browser
-    2. Take screenshots of the key sections (profile info, experience, skills, etc.)
-    3. Upload multiple screenshots below for comprehensive analysis
+    1. Copy the text from the LinkedIn profile you want to analyze
+    2. Paste it in the text area below
+    3. Include profile info, experience, skills, and summary sections
     """)
     
-    # Screenshot Upload Tool
-    st.subheader("📸 Upload LinkedIn Profile Screenshots")
+    # Manual Text Input Tool
+    st.subheader("📝 LinkedIn Profile Text Input")
     
-    # Multiple screenshot upload
-    uploaded_files = st.file_uploader(
-        "Upload LinkedIn Profile Screenshots", 
-        type=['png', 'jpg', 'jpeg'], 
-        accept_multiple_files=True,
-        help="Upload multiple screenshots covering different sections of the profile"
+    # Text input for LinkedIn profile
+    profile_text = st.text_area(
+        "Paste LinkedIn Profile Information", 
+        height=300,
+        placeholder="Paste the LinkedIn profile information here...\n\nInclude:\n- Name and title\n- Company and location\n- Experience and education\n- Skills and summary\n- Any other relevant information"
     )
     
-    if uploaded_files:
-        st.success(f"✅ {len(uploaded_files)} screenshot(s) uploaded")
-        
-        # Display uploaded screenshots
-        if len(uploaded_files) > 0:
-            st.subheader("📷 Uploaded Screenshots")
-            cols = st.columns(min(3, len(uploaded_files)))
-            for i, uploaded_file in enumerate(uploaded_files):
-                with cols[i % 3]:
-                    st.image(uploaded_file, caption=f"Screenshot {i+1}", use_column_width=True)
+    if profile_text:
+        st.success(f"✅ Profile text entered ({len(profile_text)} characters)")
         
         # Analyze button
-        if st.button("🔍 Analyze Screenshots"):
-            with st.spinner("Analyzing LinkedIn profile screenshots..."):
-                profile_data = analyze_multiple_screenshots(uploaded_files)
-                if profile_data:
-                    st.session_state.profile_data = profile_data
-                    st.success("✅ Profile analysis completed!")
-    
-
-            
-            if profile_data:
-                st.session_state.profile_data = profile_data
-                st.success("LinkedIn profile analyzed successfully!")
+        if st.button("🔍 Analyze Profile"):
+            with st.spinner("Analyzing LinkedIn profile..."):
+                try:
+                    profile_data = analyze_linkedin_profile(profile_text)
+                    if profile_data:
+                        st.session_state.profile_data = profile_data
+                        st.success("✅ Profile analysis completed!")
+                    else:
+                        st.error("Could not analyze profile. Please check the text and try again.")
+                except Exception as e:
+                    st.error(f"Error analyzing profile: {str(e)}")
                 
                 # Display profile information
                 col1, col2 = st.columns(2)

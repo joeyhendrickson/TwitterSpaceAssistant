@@ -12,8 +12,8 @@ from dotenv import load_dotenv
 
 # --- LOAD .env VARIABLES ---
 load_dotenv()
-openai_api_key = os.getenv("OPENAI_API_KEY", "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")
-pinecone_api_key = os.getenv("PINECONE_API_KEY", "pcsk_5vv1EY_EZhAHDyXU7ZY7QrRsAuBANV32bGPD5LNHmhuvwTMKs3GYNQEw6Vgo1UnCHUGm1o")
+openai_api_key = os.getenv("OPENAI_API_KEY")
+pinecone_api_key = os.getenv("PINECONE_API_KEY")
 pinecone_env = os.getenv("PINECONE_ENV", "us-east-1")
 pinecone_index_name = "twitter-assistant"
 
