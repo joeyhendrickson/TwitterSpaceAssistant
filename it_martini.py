@@ -1,12 +1,12 @@
 import os
 import streamlit as st
-import whisper
-import sounddevice as sd
-import numpy as np
 import time
 from uuid import uuid4
 from PyPDF2 import PdfReader
 from dotenv import load_dotenv
+import json
+import datetime
+from collections import defaultdict
 
 # --- STREAMLIT UI ---
 st.set_page_config(page_title="IT Martini", page_icon="🍸", layout="wide")
@@ -52,7 +52,7 @@ try:
     client = OpenAI(api_key=openai_api_key)
     pc = Pinecone(api_key=pinecone_api_key)
     
-    # IT Martini specific index - use shared index with namespace
+    # In-Person Meeting specific index - use shared index with namespace
     pinecone_index_name = "conversation-assistant-shared"
 
     # Check if index exists, if not create it
@@ -83,15 +83,148 @@ except Exception as e:
     st.stop()
 
 # --- CONFIG ---
-RECORD_DURATION = 5
-ROLLING_BUFFER_LIMIT = 6  # Generate questions every 30 seconds (6 * 5 seconds)
-MODEL_NAME = "base"
+ROLLING_BUFFER_LIMIT = 6  # Generate questions every 6 conversation chunks
 
-@st.cache_resource
-def load_model():
-    return whisper.load_model(MODEL_NAME)
+# --- BACKGROUND ONTOLOGY PROCESSING ---
+class MeetingOntologyProcessor:
+    def __init__(self):
+        self.entities = defaultdict(int)
+        self.topics = defaultdict(int)
+        self.relationships = []
+        self.conversation_flow = []
+        self.question_logic = []
+        self.meeting_start_time = None
+        
+    def extract_entities_and_topics(self, text):
+        """Extract entities and topics from conversation text"""
+        try:
+            prompt = f"""
+            Extract key entities and topics from this conversation text. Return as JSON:
+            
+            Text: {text}
+            
+            Return format:
+            {{
+                "entities": ["entity1", "entity2"],
+                "topics": ["topic1", "topic2"],
+                "key_concepts": ["concept1", "concept2"]
+            }}
+            """
+            
+            response = client.chat.completions.create(
+                model="gpt-3.5-turbo",
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0.1
+            )
+            
+            result = json.loads(response.choices[0].message.content)
+            return result
+        except Exception as e:
+            return {"entities": [], "topics": [], "key_concepts": []}
+    
+    def analyze_question_reasoning(self, conversation_text, generated_questions, context):
+        """Analyze why specific questions were generated"""
+        try:
+            prompt = f"""
+            Explain the reasoning behind generating these questions based on the conversation context.
+            
+            Conversation: {conversation_text}
+            Generated Questions: {generated_questions}
+            Context: {context}
+            
+            Return as JSON:
+            {{
+                "reasoning": "explanation of why these questions were chosen",
+                "key_triggers": ["trigger1", "trigger2"],
+                "context_usage": "how previous context influenced questions",
+                "timing_factors": "why these questions at this time"
+            }}
+            """
+            
+            response = client.chat.completions.create(
+                model="gpt-3.5-turbo",
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0.1
+            )
+            
+            result = json.loads(response.choices[0].message.content)
+            return result
+        except Exception as e:
+            return {"reasoning": "Analysis failed", "key_triggers": [], "context_usage": "", "timing_factors": ""}
+    
+    def process_conversation_chunk(self, text, timestamp=None):
+        """Process a conversation chunk and update ontology"""
+        if timestamp is None:
+            timestamp = datetime.datetime.now()
+        
+        # Extract entities and topics
+        extracted = self.extract_entities_and_topics(text)
+        
+        # Update entity and topic counts
+        for entity in extracted.get("entities", []):
+            self.entities[entity] += 1
+        for topic in extracted.get("topics", []):
+            self.topics[topic] += 1
+        
+        # Add to conversation flow
+        self.conversation_flow.append({
+            "timestamp": timestamp.isoformat(),
+            "text": text,
+            "entities": extracted.get("entities", []),
+            "topics": extracted.get("topics", []),
+            "concepts": extracted.get("key_concepts", [])
+        })
+        
+        # Build relationships
+        entities = extracted.get("entities", [])
+        topics = extracted.get("topics", [])
+        for entity in entities:
+            for topic in topics:
+                self.relationships.append({
+                    "from": entity,
+                    "to": topic,
+                    "relationship": "discussed_in",
+                    "timestamp": timestamp.isoformat()
+                })
+    
+    def record_question_generation(self, conversation_text, questions, context, reasoning):
+        """Record question generation with reasoning"""
+        self.question_logic.append({
+            "timestamp": datetime.datetime.now().isoformat(),
+            "conversation_context": conversation_text,
+            "generated_questions": questions,
+            "background_context": context,
+            "reasoning": reasoning
+        })
+    
+    def generate_meeting_analytics(self):
+        """Generate comprehensive meeting analytics"""
+        return {
+            "meeting_summary": {
+                "start_time": self.meeting_start_time.isoformat() if self.meeting_start_time else None,
+                "end_time": datetime.datetime.now().isoformat(),
+                "total_chunks": len(self.conversation_flow),
+                "total_questions": len(self.question_logic)
+            },
+            "entity_analysis": dict(self.entities),
+            "topic_analysis": dict(self.topics),
+            "conversation_flow": self.conversation_flow,
+            "relationships": self.relationships,
+            "question_logic": self.question_logic
+        }
+    
+    def start_meeting(self):
+        """Start a new meeting session"""
+        self.meeting_start_time = datetime.datetime.now()
+        self.entities.clear()
+        self.topics.clear()
+        self.relationships.clear()
+        self.conversation_flow.clear()
+        self.question_logic.clear()
 
-whisper_model = load_model()
+# Initialize ontology processor
+if 'ontology_processor' not in st.session_state:
+    st.session_state.ontology_processor = MeetingOntologyProcessor()
 
 def chunk_text(text, max_tokens=500):
     words = text.split()
@@ -197,80 +330,141 @@ with st.sidebar:
                                 placeholder="Add any specific guidance for question generation...")
     
     st.markdown("---")
-    st.markdown("### 🎙️ Recording")
-    start_button = st.button("Start Listening", type="primary")
+    st.markdown("### 🎙️ Conversation Input")
+    st.info("💡 **Web Version**: Use the browser microphone or type conversation text")
 
 # Main content area
 col1, col2 = st.columns([2, 1])
 
 with col1:
-    st.header("📝 Live Transcript")
-    transcript_display = st.empty()
-    transcript_display.markdown("*Transcript will appear here when recording...*")
+    st.header("📝 Conversation Input")
+    
+    # Browser microphone input
+    st.subheader("🎤 Browser Microphone")
+    st.info("""
+    **For live audio recording:**
+    1. Click the microphone button below
+    2. Allow microphone access when prompted
+    3. Speak your conversation
+    4. The transcript will appear automatically
+    """)
+    
+    # Audio recorder component
+    audio_bytes = st.audio_recorder(
+        text="Click to record conversation",
+        recording_color="#e74c3c",
+        neutral_color="#273c75",
+        icon_name="microphone",
+        icon_size="2x"
+    )
+    
+    # Manual text input as fallback
+    st.subheader("📝 Manual Text Input")
+    conversation_text = st.text_area(
+        "Or type/paste conversation text here:",
+        height=150,
+        placeholder="Enter conversation text here...\n\nExample: We were discussing the project timeline and how to best allocate resources..."
+    )
+    
+    # Process input
+    if audio_bytes or conversation_text:
+        if st.button("🤝 Generate Questions", type="primary"):
+            with st.spinner("Generating intelligent questions..."):
+                try:
+                    # For now, use manual text input
+                    # TODO: Add audio transcription service
+                    text_to_process = conversation_text if conversation_text else "Audio recording captured (transcription pending)"
+                    
+                    # Start meeting if not already started
+                    if not st.session_state.ontology_processor.meeting_start_time:
+                        st.session_state.ontology_processor.start_meeting()
+                    
+                    # Background ontology processing
+                    st.session_state.ontology_processor.process_conversation_chunk(text_to_process)
+                    
+                    # Store conversation context
+                    embed_and_upsert(text_to_process, topic)
+                    
+                    # Get context for question generation
+                    context = query_context(text_to_process, topic)
+                    
+                    # Generate questions
+                    questions = generate_questions(text_to_process, topic, custom_prompt)
+                    
+                    # Analyze question reasoning (background)
+                    reasoning = st.session_state.ontology_processor.analyze_question_reasoning(
+                        text_to_process, questions, context
+                    )
+                    
+                    # Record question generation with reasoning
+                    st.session_state.ontology_processor.record_question_generation(
+                        text_to_process, questions, context, reasoning
+                    )
+                    
+                    # Store in session state
+                    st.session_state.last_questions = questions
+                    st.session_state.last_conversation = text_to_process
+                    
+                    st.success("Questions generated successfully!")
+                except Exception as e:
+                    st.error(f"Error generating questions: {str(e)}")
 
 with col2:
     st.header("❓ Smart Questions")
-    question_display = st.empty()
-    question_display.markdown("*Questions will be generated every 30 seconds...*")
+    
+    if 'last_questions' in st.session_state:
+        st.markdown("**🤝 Meeting Questions:**")
+        st.markdown(st.session_state.last_questions)
+        
+        # Show the conversation that was analyzed
+        with st.expander("📝 Analyzed Conversation"):
+            st.text(st.session_state.last_conversation)
+    else:
+        st.markdown("*Questions will appear here after you generate them...*")
 
-# Initialize session state
-if 'listening' not in st.session_state:
-    st.session_state.listening = False
-if 'rolling_buffer' not in st.session_state:
-    st.session_state.rolling_buffer = []
-if 'all_transcripts' not in st.session_state:
-    st.session_state.all_transcripts = []
+# Analytics Download Section
+st.markdown("---")
+st.header("📊 Meeting Analytics")
 
-if start_button:
-    st.session_state.listening = True
-    st.session_state.rolling_buffer = []
-    st.session_state.all_transcripts = []
-
-# Live recording and question generation
-if st.session_state.get("listening", False):
-    try:
-        while st.session_state.get("listening", False):
-            st.markdown("**Recording...** 🎙️")
+if st.session_state.ontology_processor.meeting_start_time:
+    st.success(f"✅ Meeting in progress since {st.session_state.ontology_processor.meeting_start_time.strftime('%H:%M:%S')}")
+    
+    # Show analytics summary
+    analytics = st.session_state.ontology_processor.generate_meeting_analytics()
+    
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        st.metric("Conversation Chunks", analytics["meeting_summary"]["total_chunks"])
+    with col2:
+        st.metric("Questions Generated", analytics["meeting_summary"]["total_questions"])
+    with col3:
+        st.metric("Topics Identified", len(analytics["topic_analysis"]))
+    
+    # Download analytics
+    if st.button("📥 Download Meeting Analytics"):
+        try:
+            # Generate analytics data
+            analytics_data = st.session_state.ontology_processor.generate_meeting_analytics()
             
-            # Record audio
-            audio = sd.rec(int(RECORD_DURATION * 16000), samplerate=16000, channels=1, dtype='float32')
-            sd.wait()
-            audio_np = np.squeeze(audio)
+            # Create JSON file for download
+            analytics_json = json.dumps(analytics_data, indent=2)
             
-            # Transcribe
-            result = whisper_model.transcribe(audio_np, fp16=False)
-            text = result["text"].strip()
+            # Create download button
+            st.download_button(
+                label="📄 Download Analytics (JSON)",
+                data=analytics_json,
+                file_name=f"meeting_analytics_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.json",
+                mime="application/json"
+            )
             
-            if text:
-                st.session_state.all_transcripts.append(text)
-                st.session_state.rolling_buffer.append(text)
+            # Show analytics preview
+            with st.expander("🔍 Analytics Preview"):
+                st.json(analytics_data)
                 
-                if len(st.session_state.rolling_buffer) > ROLLING_BUFFER_LIMIT:
-                    st.session_state.rolling_buffer.pop(0)
-                
-                joined_text = " ".join(st.session_state.rolling_buffer)
-                transcript_display.markdown("**Latest Transcript:**\n" + joined_text)
-                
-                # Generate questions periodically
-                if len(st.session_state.all_transcripts) % ROLLING_BUFFER_LIMIT == 0:
-                    questions = generate_questions(joined_text, topic, custom_prompt)
-                    question_display.markdown("**🤝 Meeting Questions:**\n" + questions)
-                    
-                    # Store in vector database
-                    embed_and_upsert(joined_text, topic)
-            
-            time.sleep(1)
-            
-    except KeyboardInterrupt:
-        st.session_state.listening = False
-        st.success("Recording stopped.")
-
-# Stop button
-if st.session_state.get("listening", False):
-    if st.button("Stop Listening"):
-        st.session_state.listening = False
-        st.success("Recording stopped.")
-        st.rerun()
+        except Exception as e:
+            st.error(f"Error generating analytics: {str(e)}")
+else:
+    st.info("💡 Start generating questions to begin meeting analytics tracking")
 
 # Footer
 st.markdown("---")
