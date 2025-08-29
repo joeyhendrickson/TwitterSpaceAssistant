@@ -1,5 +1,8 @@
 import os
 import streamlit as st
+import whisper
+import sounddevice as sd
+import numpy as np
 import time
 from uuid import uuid4
 from PyPDF2 import PdfReader
@@ -79,6 +82,17 @@ except Exception as e:
     """)
     st.stop()
 
+# --- CONFIG ---
+RECORD_DURATION = 5
+ROLLING_BUFFER_LIMIT = 6  # Generate questions every 30 seconds (6 * 5 seconds)
+MODEL_NAME = "base"
+
+@st.cache_resource
+def load_model():
+    return whisper.load_model(MODEL_NAME)
+
+whisper_model = load_model()
+
 def chunk_text(text, max_tokens=500):
     words = text.split()
     return [" ".join(words[i:i+max_tokens]) for i in range(0, len(words), max_tokens)]
@@ -116,16 +130,18 @@ def summarize_and_append(transcript, topic):
 def generate_questions(transcript, topic, prompt_override=None):
     context = query_context(transcript, topic)
     
-    # Technology-focused prompt for IT Martini
-    tech_prompt = f"""
-You are IT Martini, an expert technology conversation assistant. You're listening to a live technology conversation and need to generate 10 intelligent, technology-focused questions that will help drive the conversation forward.
+    # Meeting-focused prompt for In-Person Meeting Assistant
+    meeting_prompt = f"""
+You are an expert meeting assistant listening to a live conversation. You need to generate 10 intelligent, context-specific questions that will help drive the conversation forward and keep participants engaged.
 
 Focus on:
-- Current technology trends and innovations
-- Technical challenges and solutions
-- Industry insights and best practices
-- Emerging technologies and their implications
-- Practical applications and use cases
+- Building on what was just discussed
+- Encouraging deeper exploration of topics
+- Helping participants think critically
+- Moving toward productive outcomes
+- Addressing gaps or areas needing clarification
+- Fostering collaboration and engagement
+- Helping reach meeting objectives
 
 Put primary emphasis on the most recent transcription of the conversation — the most important and relevant part of the context.
 
@@ -140,23 +156,23 @@ Relevant Background Context:
 {context}
 
 ---
-Generate 10 intelligent, technology-focused questions that will help move the conversation forward:"""
+Generate 10 intelligent, discussion-forwarding questions that will help move the conversation forward:"""
 
     response = client.chat.completions.create(
         model="gpt-3.5-turbo",
-        messages=[{"role": "user", "content": tech_prompt.strip()}]
+        messages=[{"role": "user", "content": meeting_prompt.strip()}]
     )
     return response.choices[0].message.content.strip()
 
 # Main app interface
-st.title("🍸 IT Martini")
-st.markdown("**Your AI-powered conversation partner for technology discussions**")
+st.title("🤝 In-Person Meeting")
+st.markdown("**Your AI-powered conversation partner for live meetings and discussions**")
 
 # Sidebar for controls
 with st.sidebar:
     st.header("🎛️ Controls")
     
-    topic = st.text_input("Conversation Topic", value="technology-discussion")
+    topic = st.text_input("Conversation Topic", value="meeting-discussion")
     
     if st.button("🗑️ Clear Previous Data"):
         try:
@@ -181,60 +197,86 @@ with st.sidebar:
                                 placeholder="Add any specific guidance for question generation...")
     
     st.markdown("---")
-    st.markdown("### 💬 Conversation Input")
-    st.info("💡 **Web Version**: Type your conversation text instead of recording audio")
+    st.markdown("### 🎙️ Recording")
+    start_button = st.button("Start Listening", type="primary")
 
 # Main content area
 col1, col2 = st.columns([2, 1])
 
 with col1:
-    st.header("📝 Conversation Input")
-    
-    # Text input for conversation
-    conversation_text = st.text_area(
-        "Type or paste your technology conversation here:",
-        height=200,
-        placeholder="Enter your technology conversation text here...\n\nExample: We were discussing the impact of AI on software development and how it's changing the way teams collaborate..."
-    )
-    
-    if st.button("🍸 Generate Questions", type="primary"):
-        if conversation_text.strip():
-            with st.spinner("Generating intelligent questions..."):
-                try:
-                    # Store conversation context
-                    embed_and_upsert(conversation_text, topic)
-                    
-                    # Generate questions
-                    questions = generate_questions(conversation_text, topic, custom_prompt)
-                    
-                    # Store in session state
-                    st.session_state.last_questions = questions
-                    st.session_state.last_conversation = conversation_text
-                    
-                    st.success("Questions generated successfully!")
-                except Exception as e:
-                    st.error(f"Error generating questions: {str(e)}")
-        else:
-            st.error("Please enter some conversation text first.")
+    st.header("📝 Live Transcript")
+    transcript_display = st.empty()
+    transcript_display.markdown("*Transcript will appear here when recording...*")
 
 with col2:
-    st.header("Generator")
-    
-    if 'last_questions' in st.session_state:
-        st.markdown("**🍸 IT Martini Questions:**")
-        st.markdown(st.session_state.last_questions)
-        
-        # Show the conversation that was analyzed
-        with st.expander("📝 Analyzed Conversation"):
-            st.text(st.session_state.last_conversation)
-    else:
-        st.markdown("*Questions will appear here after you generate them...*")
+    st.header("❓ Smart Questions")
+    question_display = st.empty()
+    question_display.markdown("*Questions will be generated every 30 seconds...*")
+
+# Initialize session state
+if 'listening' not in st.session_state:
+    st.session_state.listening = False
+if 'rolling_buffer' not in st.session_state:
+    st.session_state.rolling_buffer = []
+if 'all_transcripts' not in st.session_state:
+    st.session_state.all_transcripts = []
+
+if start_button:
+    st.session_state.listening = True
+    st.session_state.rolling_buffer = []
+    st.session_state.all_transcripts = []
+
+# Live recording and question generation
+if st.session_state.get("listening", False):
+    try:
+        while st.session_state.get("listening", False):
+            st.markdown("**Recording...** 🎙️")
+            
+            # Record audio
+            audio = sd.rec(int(RECORD_DURATION * 16000), samplerate=16000, channels=1, dtype='float32')
+            sd.wait()
+            audio_np = np.squeeze(audio)
+            
+            # Transcribe
+            result = whisper_model.transcribe(audio_np, fp16=False)
+            text = result["text"].strip()
+            
+            if text:
+                st.session_state.all_transcripts.append(text)
+                st.session_state.rolling_buffer.append(text)
+                
+                if len(st.session_state.rolling_buffer) > ROLLING_BUFFER_LIMIT:
+                    st.session_state.rolling_buffer.pop(0)
+                
+                joined_text = " ".join(st.session_state.rolling_buffer)
+                transcript_display.markdown("**Latest Transcript:**\n" + joined_text)
+                
+                # Generate questions periodically
+                if len(st.session_state.all_transcripts) % ROLLING_BUFFER_LIMIT == 0:
+                    questions = generate_questions(joined_text, topic, custom_prompt)
+                    question_display.markdown("**🤝 Meeting Questions:**\n" + questions)
+                    
+                    # Store in vector database
+                    embed_and_upsert(joined_text, topic)
+            
+            time.sleep(1)
+            
+    except KeyboardInterrupt:
+        st.session_state.listening = False
+        st.success("Recording stopped.")
+
+# Stop button
+if st.session_state.get("listening", False):
+    if st.button("Stop Listening"):
+        st.session_state.listening = False
+        st.success("Recording stopped.")
+        st.rerun()
 
 # Footer
 st.markdown("---")
-st.markdown("*IT Martini - Making technology conversations more engaging and insightful* 🍸")
+st.markdown("*In-Person Meeting Assistant - Making live conversations more engaging and insightful* 🤝")
 
 # Deployment info
 st.sidebar.markdown("---")
-st.sidebar.markdown("### 🌐 Web Version")
-st.sidebar.info("This is the web deployment version of IT Martini. For audio recording, use the local version.")
+st.sidebar.markdown("### 🎙️ Live Recording")
+st.sidebar.info("This app records live audio and generates intelligent questions every 30 seconds based on the conversation context.")
