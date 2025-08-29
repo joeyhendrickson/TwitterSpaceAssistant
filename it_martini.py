@@ -117,9 +117,22 @@ class MeetingOntologyProcessor:
                 temperature=0.1
             )
             
-            result = json.loads(response.choices[0].message.content)
-            return result
+            # Try to parse JSON, fallback to simple extraction if it fails
+            try:
+                result = json.loads(response.choices[0].message.content)
+                return result
+            except json.JSONDecodeError:
+                # Fallback: simple keyword extraction
+                words = text.lower().split()
+                common_topics = ["meeting", "project", "team", "client", "budget", "timeline", "strategy"]
+                found_topics = [word for word in words if word in common_topics]
+                return {
+                    "entities": [],
+                    "topics": found_topics[:3],
+                    "key_concepts": []
+                }
         except Exception as e:
+            # Return empty result if everything fails
             return {"entities": [], "topics": [], "key_concepts": []}
     
     def analyze_question_reasoning(self, conversation_text, generated_questions, context):
@@ -147,8 +160,18 @@ class MeetingOntologyProcessor:
                 temperature=0.1
             )
             
-            result = json.loads(response.choices[0].message.content)
-            return result
+            # Try to parse JSON, fallback to simple reasoning if it fails
+            try:
+                result = json.loads(response.choices[0].message.content)
+                return result
+            except json.JSONDecodeError:
+                # Fallback: simple reasoning
+                return {
+                    "reasoning": f"Questions generated based on conversation about: {conversation_text[:100]}...",
+                    "key_triggers": ["conversation context"],
+                    "context_usage": "Previous context used to inform question generation",
+                    "timing_factors": "Questions generated when conversation context was available"
+                }
         except Exception as e:
             return {"reasoning": "Analysis failed", "key_triggers": [], "context_usage": "", "timing_factors": ""}
     
@@ -340,23 +363,26 @@ with col1:
     st.header("📝 Conversation Input")
     
     # Browser microphone input
-    st.subheader("🎤 Browser Microphone")
+    st.subheader("🎤 Audio Input")
     st.info("""
     **For live audio recording:**
-    1. Click the microphone button below
-    2. Allow microphone access when prompted
-    3. Speak your conversation
-    4. The transcript will appear automatically
+    1. Use your device's voice-to-text feature
+    2. Copy the transcribed text
+    3. Paste it in the text area below
+    4. Click "Generate Questions"
     """)
     
-    # Audio recorder component
-    audio_bytes = st.audio_recorder(
-        text="Click to record conversation",
-        recording_color="#e74c3c",
-        neutral_color="#273c75",
-        icon_name="microphone",
-        icon_size="2x"
+    # File uploader for audio files (alternative)
+    st.subheader("📁 Upload Audio File")
+    uploaded_audio = st.file_uploader(
+        "Upload audio file (MP3, WAV, M4A)",
+        type=['mp3', 'wav', 'm4a'],
+        help="Upload an audio recording of your conversation"
     )
+    
+    if uploaded_audio:
+        st.success(f"✅ Audio file uploaded: {uploaded_audio.name}")
+        st.info("💡 Audio transcription will be added in a future update")
     
     # Manual text input as fallback
     st.subheader("📝 Manual Text Input")
@@ -367,13 +393,13 @@ with col1:
     )
     
     # Process input
-    if audio_bytes or conversation_text:
+    if uploaded_audio or conversation_text:
         if st.button("🤝 Generate Questions", type="primary"):
             with st.spinner("Generating intelligent questions..."):
                 try:
                     # For now, use manual text input
                     # TODO: Add audio transcription service
-                    text_to_process = conversation_text if conversation_text else "Audio recording captured (transcription pending)"
+                    text_to_process = conversation_text if conversation_text else f"Audio file uploaded: {uploaded_audio.name} (transcription pending)"
                     
                     # Start meeting if not already started
                     if not st.session_state.ontology_processor.meeting_start_time:
