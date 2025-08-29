@@ -1,14 +1,9 @@
 import os
 import streamlit as st
-import whisper
-import sounddevice as sd
-import numpy as np
 import time
 import random
 from uuid import uuid4
 from PyPDF2 import PdfReader
-from openai import OpenAI
-from pinecone import Pinecone
 from dotenv import load_dotenv
 import requests
 from bs4 import BeautifulSoup
@@ -18,39 +13,88 @@ import cv2
 from PIL import Image
 import pytesseract
 
-
 # Load environment variables
 load_dotenv()
 
 # Initialize API clients
-openai_api_key = os.getenv("OPENAI_API_KEY", "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")
-pinecone_api_key = os.getenv("PINECONE_API_KEY", "pcsk_5vv1EY_EZhAHDyXU7ZY7QrRsAuBANV32bGPD5LNHmhuvwTMKs3GYNQEw6Vgo1UnCHUGm1o")
+openai_api_key = os.getenv("OPENAI_API_KEY")
+pinecone_api_key = os.getenv("PINECONE_API_KEY")
 pinecone_env = os.getenv("PINECONE_ENV", "us-east-1")
 
-client = OpenAI(api_key=openai_api_key)
-pc = Pinecone(api_key=pinecone_api_key)
+# Check if API keys are available
+if not openai_api_key or not pinecone_api_key:
+    st.error("🚨 **Configuration Error**")
+    st.markdown("""
+    This app requires API keys to function. Please set up the following environment variables in your Streamlit Cloud deployment:
 
-# LinkedIn Call specific index
-linkedin_index_name = "linkedin-call-assistant"
+    **Required Environment Variables:**
+    - `OPENAI_API_KEY` - Your OpenAI API key
+    - `PINECONE_API_KEY` - Your Pinecone API key
+    - `PINECONE_ENV` - Your Pinecone environment (default: us-east-1)
 
-if linkedin_index_name not in pc.list_indexes().names():
-    pc.create_index(
-        name=linkedin_index_name,
-        dimension=1536,
-        metric="cosine"
-    )
-index = pc.Index(linkedin_index_name)
+    **How to set them:**
+    1. Go to your Streamlit Cloud dashboard
+    2. Click on your app
+    3. Go to "Settings" → "Secrets"
+    4. Add the environment variables
+    5. Redeploy your app
+
+    **Example secrets format:**
+    ```
+    OPENAI_API_KEY = "sk-your-openai-key-here"
+    PINECONE_API_KEY = "your-pinecone-key-here"
+    PINECONE_ENV = "us-east-1"
+    ```
+    """)
+    st.stop()
+
+# Initialize API clients
+try:
+    from openai import OpenAI
+    from pinecone import Pinecone
+
+    client = OpenAI(api_key=openai_api_key)
+    pc = Pinecone(api_key=pinecone_api_key)
+
+    # LinkedIn Call specific index
+    linkedin_index_name = "linkedin-call-assistant-web"
+
+    # Check if index exists, if not create it
+    try:
+        index = pc.Index(linkedin_index_name)
+    except Exception:
+        # Index doesn't exist, create it
+        from pinecone import ServerlessSpec
+        pc.create_index(
+            name=linkedin_index_name,
+            dimension=1536,
+            metric="cosine",
+            spec=ServerlessSpec(
+                cloud="aws",
+                region="us-east-1"
+            )
+        )
+        index = pc.Index(linkedin_index_name)
+
+except Exception as e:
+    st.error(f"🚨 **Connection Error**: {str(e)}")
+    st.markdown("""
+    There was an error connecting to the AI services. Please check:
+    1. Your API keys are correct
+    2. Your internet connection
+    3. The services are available
+    """)
+    st.stop()
 
 # Configuration
-RECORD_DURATION = 5
-ROLLING_BUFFER_LIMIT = 12
-MODEL_NAME = "base"
+# RECORD_DURATION = 5 # Removed for web version
+# ROLLING_BUFFER_LIMIT = 12 # Removed for web version
+# MODEL_NAME = "base" # Removed for web version
 
-@st.cache_resource
-def load_model():
-    return whisper.load_model(MODEL_NAME)
-
-whisper_model = load_model()
+# @st.cache_resource
+# def load_model():
+#     return whisper.load_model(MODEL_NAME)
+# whisper_model = load_model() # Removed for web version
 
 def chunk_text(text, max_tokens=500):
     words = text.split()
@@ -1010,77 +1054,74 @@ def main():
         st.session_state.personality_summary = personality_summary
         st.session_state.call_goals = call_goals
 
-    # Start Call
-    if 'personality_summary' in st.session_state and 'call_goals' in st.session_state:
-        st.header("🎤 Start Call")
+    # Call Preparation
+    if 'personality_summary' in st.session_state:
+        st.header("📞 Call Preparation")
         
-        if st.button("Start Listening"):
-            st.session_state.listening = True
+        # Auto-populate personality summary
+        personality_summary = st.text_area(
+            "Personality Summary (Auto-generated)",
+            value=st.session_state.personality_summary,
+            height=150,
+            help="This summary will guide question generation during the call"
+        )
+        
+        call_goals = st.text_area(
+            "Call Goals & Agenda",
+            placeholder="Enter the purpose, goals, or agenda for this call...",
+            height=100
+        )
+        
+        # Store in session state
+        st.session_state.personality_summary = personality_summary
+        st.session_state.call_goals = call_goals
 
-    # Call Interface
-    if st.session_state.get("listening", False):
-        st.header("🎙️ Live Call")
+    # Web Version - Conversation Input
+    if 'personality_summary' in st.session_state and 'call_goals' in st.session_state:
+        st.header("💬 Conversation Input")
         
-        # Display current person info
-        col1, col2 = st.columns(2)
-        with col1:
-            st.info(f"**Calling:** {person_name}")
-            st.info(f"**Goals:** {st.session_state.get('call_goals', 'Not set')}")
+        st.info("💡 **Web Version**: Type your conversation text instead of recording audio")
         
-        with col2:
-            if st.button("Stop Listening"):
-                st.session_state.listening = False
-                st.success("Call ended.")
-                st.rerun()
+        # Text input for conversation
+        conversation_text = st.text_area(
+            "Type or paste your conversation here:",
+            height=200,
+            placeholder="Enter your conversation text here...\n\nExample: We were discussing the project timeline and how to best allocate resources..."
+        )
         
-        # Transcript and questions display
-        transcript_display = st.empty()
-        question_display = st.empty()
-        
-        rolling_buffer = []
-        all_transcripts = []
-        
-        try:
-            while st.session_state.get("listening", False):
-                st.markdown("**Recording...** 🎙️")
-                
-                # Record audio
-                audio = sd.rec(int(RECORD_DURATION * 16000), samplerate=16000, channels=1, dtype='float32')
-                sd.wait()
-                audio_np = np.squeeze(audio)
-                
-                # Transcribe
-                result = whisper_model.transcribe(audio_np, fp16=False)
-                text = result["text"].strip()
-                
-                if text:
-                    all_transcripts.append(text)
-                    rolling_buffer.append(text)
-                    
-                    if len(rolling_buffer) > ROLLING_BUFFER_LIMIT:
-                        rolling_buffer.pop(0)
-                    
-                    joined_text = " ".join(rolling_buffer)
-                    transcript_display.markdown("**Latest Transcript:**\n" + joined_text)
-                    
-                    # Generate questions periodically
-                    if len(all_transcripts) % ROLLING_BUFFER_LIMIT == 0:
+        if st.button("🎯 Generate Questions", type="primary"):
+            if conversation_text.strip():
+                with st.spinner("Generating personalized questions..."):
+                    try:
+                        # Store conversation context
+                        embed_and_upsert(conversation_text, person_name)
+                        
+                        # Generate questions
                         questions = generate_questions(
-                            joined_text, 
+                            conversation_text, 
                             person_name, 
                             st.session_state.get('call_goals', ''),
                             st.session_state.get('personality_summary', '')
                         )
-                        question_display.markdown("**Smart Questions:**\n" + questions)
                         
-                        # Store in vector database
-                        embed_and_upsert(joined_text, person_name)
-                
-                time.sleep(1)
-                
-        except KeyboardInterrupt:
-            st.session_state.listening = False
-            st.success("Call ended.")
+                        # Store in session state
+                        st.session_state.last_questions = questions
+                        st.session_state.last_conversation = conversation_text
+                        
+                        st.success("Questions generated successfully!")
+                    except Exception as e:
+                        st.error(f"Error generating questions: {str(e)}")
+            else:
+                st.error("Please enter some conversation text first.")
+        
+        # Display generated questions
+        if 'last_questions' in st.session_state:
+            st.subheader("🎯 Personalized Questions")
+            st.markdown(st.session_state.last_questions)
+            
+            # Show the conversation that was analyzed
+            with st.expander("📝 Analyzed Conversation"):
+                st.text(st.session_state.last_conversation)
 
 if __name__ == "__main__":
     main() 

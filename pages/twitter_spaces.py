@@ -1,47 +1,92 @@
 import os
 import streamlit as st
-import whisper
-import sounddevice as sd
-import numpy as np
 import time
 from uuid import uuid4
 from PyPDF2 import PdfReader
-from openai import OpenAI
-from pinecone import Pinecone
 from dotenv import load_dotenv
 
 # Load environment variables
 load_dotenv()
 
 # Initialize API clients
-openai_api_key = os.getenv("OPENAI_API_KEY", "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")
-pinecone_api_key = os.getenv("PINECONE_API_KEY", "pcsk_5vv1EY_EZhAHDyXU7ZY7QrRsAuBANV32bGPD5LNHmhuvwTMKs3GYNQEw6Vgo1UnCHUGm1o")
+openai_api_key = os.getenv("OPENAI_API_KEY")
+pinecone_api_key = os.getenv("PINECONE_API_KEY")
 pinecone_env = os.getenv("PINECONE_ENV", "us-east-1")
 
-client = OpenAI(api_key=openai_api_key)
-pc = Pinecone(api_key=pinecone_api_key)
+# Check if API keys are available
+if not openai_api_key or not pinecone_api_key:
+    st.error("🚨 **Configuration Error**")
+    st.markdown("""
+    This app requires API keys to function. Please set up the following environment variables in your Streamlit Cloud deployment:
 
-# Twitter Spaces specific index
-twitter_index_name = "twitter-assistant"
+    **Required Environment Variables:**
+    - `OPENAI_API_KEY` - Your OpenAI API key
+    - `PINECONE_API_KEY` - Your Pinecone API key
+    - `PINECONE_ENV` - Your Pinecone environment (default: us-east-1)
 
-if twitter_index_name not in pc.list_indexes().names():
-    pc.create_index(
-        name=twitter_index_name,
-        dimension=1536,
-        metric="cosine"
-    )
-index = pc.Index(twitter_index_name)
+    **How to set them:**
+    1. Go to your Streamlit Cloud dashboard
+    2. Click on your app
+    3. Go to "Settings" → "Secrets"
+    4. Add the environment variables
+    5. Redeploy your app
+
+    **Example secrets format:**
+    ```
+    OPENAI_API_KEY = "sk-your-openai-key-here"
+    PINECONE_API_KEY = "your-pinecone-key-here"
+    PINECONE_ENV = "us-east-1"
+    ```
+    """)
+    st.stop()
+
+# Initialize API clients
+try:
+    from openai import OpenAI
+    from pinecone import Pinecone
+
+    client = OpenAI(api_key=openai_api_key)
+    pc = Pinecone(api_key=pinecone_api_key)
+
+    # Twitter Spaces specific index
+    twitter_index_name = "twitter-assistant-web"
+
+    # Check if index exists, if not create it
+    try:
+        index = pc.Index(twitter_index_name)
+    except Exception:
+        # Index doesn't exist, create it
+        from pinecone import ServerlessSpec
+        pc.create_index(
+            name=twitter_index_name,
+            dimension=1536,
+            metric="cosine",
+            spec=ServerlessSpec(
+                cloud="aws",
+                region="us-east-1"
+            )
+        )
+        index = pc.Index(twitter_index_name)
+
+except Exception as e:
+    st.error(f"🚨 **Connection Error**: {str(e)}")
+    st.markdown("""
+    There was an error connecting to the AI services. Please check:
+    1. Your API keys are correct
+    2. Your internet connection
+    3. The services are available
+    """)
+    st.stop()
 
 # Configuration
-RECORD_DURATION = 5
-ROLLING_BUFFER_LIMIT = 12
-MODEL_NAME = "base"
+# RECORD_DURATION = 5 # Removed for web version
+# ROLLING_BUFFER_LIMIT = 12 # Removed for web version
+# MODEL_NAME = "base" # Removed for web version
 
-@st.cache_resource
-def load_model():
-    return whisper.load_model(MODEL_NAME)
-
-whisper_model = load_model()
+# @st.cache_resource
+# def load_model():
+#     return whisper.load_model(MODEL_NAME)
+# whisper_model = load_model() # Removed for web version
 
 def chunk_text(text, max_tokens=500):
     words = text.split()
@@ -138,19 +183,20 @@ def main():
         try:
             while True:
                 st.markdown("**Recording...**")
-                audio = sd.rec(int(RECORD_DURATION * 16000), samplerate=16000, channels=1, dtype='float32')
-                sd.wait()
-                audio_np = np.squeeze(audio)
-                result = whisper_model.transcribe(audio_np, fp16=False)
-                text = result["text"].strip()
+                # Audio recording logic removed for web version
+                # audio = sd.rec(int(RECORD_DURATION * 16000), samplerate=16000, channels=1, dtype='float32')
+                # sd.wait()
+                # audio_np = np.squeeze(audio)
+                # result = whisper_model.transcribe(audio_np, fp16=False)
+                text = "This is a placeholder for the transcript." # Placeholder for transcript
                 all_transcripts.append(text)
                 rolling_buffer.append(text)
-                if len(rolling_buffer) > ROLLING_BUFFER_LIMIT:
+                if len(rolling_buffer) > 12: # Hardcoded for web version
                     rolling_buffer.pop(0)
                 joined_text = " ".join(rolling_buffer)
                 transcript_display.markdown("**Latest Transcript:**\n" + joined_text)
 
-                if len(all_transcripts) % ROLLING_BUFFER_LIMIT == 0:
+                if len(all_transcripts) % 12 == 0: # Hardcoded for web version
                     summarize_and_append(joined_text, topic)
                     questions = generate_questions(joined_text, topic, custom_prompt)
                     question_display.markdown("**Smart Questions:**\n" + questions)
