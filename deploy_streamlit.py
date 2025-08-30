@@ -13,7 +13,7 @@ def deploy_to_streamlit():
     app_config = {
         "repository": "joeyhendrickson/TwitterSpaceAssistant",
         "branch": "main",
-        "mainModule": "dashboard.py",
+        "mainModule": "main.py",
         "appId": "ai-conversation-assistant",
         "appName": "AI Conversation Assistant Hub",
         "environmentVariables": {
