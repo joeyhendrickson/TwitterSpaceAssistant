@@ -9,7 +9,7 @@ import datetime
 from collections import defaultdict
 
 # --- STREAMLIT UI ---
-st.set_page_config(page_title="IT Martini", page_icon="🍸", layout="wide")
+st.set_page_config(page_title="In-Person Meeting", page_icon="🤝", layout="wide")
 
 # --- LOAD .env VARIABLES ---
 load_dotenv()
