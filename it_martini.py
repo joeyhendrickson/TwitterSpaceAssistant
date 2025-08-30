@@ -326,9 +326,9 @@ st.markdown("**Your AI-powered conversation partner for live meetings and discus
 
 # Sidebar for controls
 with st.sidebar:
-    st.header("🎛️ Controls")
+    st.header("🎛️ In-Person Meeting Controls")
     
-    topic = st.text_input("Conversation Topic", value="meeting-discussion")
+    topic = st.text_input("Meeting Topic", value="meeting-discussion")
     
     if st.button("🗑️ Clear Previous Data"):
         try:
@@ -349,18 +349,18 @@ with st.sidebar:
         except Exception as e:
             st.error(f"Error processing PDF: {str(e)}")
     
-    custom_prompt = st.text_area("Custom Prompt (optional)", height=100, 
+    custom_prompt = st.text_area("Meeting Guidance (optional)", height=100, 
                                 placeholder="Add any specific guidance for question generation...")
     
     st.markdown("---")
-    st.markdown("### 🎙️ Conversation Input")
+    st.markdown("### 🎙️ Meeting Input")
     st.info("💡 **Web Version**: Use the browser microphone or type conversation text")
 
 # Main content area
 col1, col2 = st.columns([2, 1])
 
 with col1:
-    st.header("📝 Conversation Input")
+    st.header("📝 Meeting Input")
     
     # Browser microphone input
     st.subheader("🎤 Audio Input")
@@ -387,9 +387,9 @@ with col1:
     # Manual text input as fallback
     st.subheader("📝 Manual Text Input")
     conversation_text = st.text_area(
-        "Or type/paste conversation text here:",
+        "Or type/paste meeting text here:",
         height=150,
-        placeholder="Enter conversation text here...\n\nExample: We were discussing the project timeline and how to best allocate resources..."
+        placeholder="Enter meeting text here...\n\nExample: We were discussing the project timeline and how to best allocate resources..."
     )
     
     # Process input
@@ -443,7 +443,7 @@ with col2:
         st.markdown(st.session_state.last_questions)
         
         # Show the conversation that was analyzed
-        with st.expander("📝 Analyzed Conversation"):
+        with st.expander("📝 Analyzed Meeting"):
             st.text(st.session_state.last_conversation)
     else:
         st.markdown("*Questions will appear here after you generate them...*")
@@ -460,7 +460,7 @@ if st.session_state.ontology_processor.meeting_start_time:
     
     col1, col2, col3 = st.columns(3)
     with col1:
-        st.metric("Conversation Chunks", analytics["meeting_summary"]["total_chunks"])
+        st.metric("Meeting Chunks", analytics["meeting_summary"]["total_chunks"])
     with col2:
         st.metric("Questions Generated", analytics["meeting_summary"]["total_questions"])
     with col3:
@@ -498,5 +498,5 @@ st.markdown("*In-Person Meeting Assistant - Making live conversations more engag
 
 # Deployment info
 st.sidebar.markdown("---")
-st.sidebar.markdown("### 🎙️ Live Recording")
-st.sidebar.info("This app records live audio and generates intelligent questions every 30 seconds based on the conversation context.")
+st.sidebar.markdown("### 🎙️ Meeting Assistant")
+st.sidebar.info("This app processes meeting content and generates intelligent questions based on the discussion context.")
