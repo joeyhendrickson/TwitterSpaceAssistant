@@ -1,3 +1,6 @@
+# In-Person Meeting Assistant
+# Renamed from it_martini.py to in_person_meeting.py
+
 import os
 import streamlit as st
 import time
@@ -9,7 +12,12 @@ import datetime
 from collections import defaultdict
 
 # --- STREAMLIT UI ---
-st.set_page_config(page_title="In-Person Meeting", page_icon="🤝", layout="wide")
+st.set_page_config(
+    page_title="In-Person Meeting", 
+    page_icon="🤝", 
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
 
 # --- LOAD .env VARIABLES ---
 load_dotenv()
