@@ -15,7 +15,7 @@ An AI-powered conversation partner that generates intelligent, technology-focuse
 ### Local Development
 ```bash
 pip install -r requirements.txt
-streamlit run it_martini.py
+streamlit run main.py
 ```
 
 ### Web Deployment
@@ -32,7 +32,7 @@ The app is optimized for deployment on Streamlit Cloud.
 
 2. **Install Dependencies**: `pip install -r requirements.txt`
 
-3. **Run the App**: `streamlit run it_martini.py`
+3. **Run the App**: `streamlit run main.py`
 
 ## 📱 Usage
 

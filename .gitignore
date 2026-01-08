@@ -67,3 +67,5 @@ Thumbs.db
 # Model files (if cached)
 *.pt
 *.pth
+.env.backup
+.env.local

@@ -78,6 +78,15 @@ def render_selected_app():
         except ImportError as e:
             st.error(f"Error loading LinkedIn Call Assistant: {e}")
             st.button("← Back to Dashboard", on_click=lambda: st.session_state.update({"selected_app": None}))
+    
+    elif selected_app == "interview_prep":
+        # Import and run Interview Prep app
+        try:
+            from pages.interview_prep import main as interview_main
+            interview_main()
+        except ImportError as e:
+            st.error(f"Error loading Interview Preparation Assistant: {e}")
+            st.button("← Back to Dashboard", on_click=lambda: st.session_state.update({"selected_app": None}))
 
 def main():
     # Check if an app is selected
@@ -94,7 +103,7 @@ def main():
     """, unsafe_allow_html=True)
     
     # App selection
-    col1, col2 = st.columns(2)
+    col1, col2, col3 = st.columns(3)
     
     with col1:
         st.markdown("""
@@ -142,6 +151,29 @@ def main():
             st.session_state.selected_app = "linkedin_calls"
             st.rerun()
     
+    with col3:
+        st.markdown("""
+        <div class="app-card">
+            <div class="app-icon">🎯</div>
+            <h2>Interview Preparation</h2>
+            <p>Analyze your resume and get personalized interview preparation with practice questions and strategic insights.</p>
+            <div class="feature-list">
+                <strong>Features:</strong>
+                <ul>
+                    <li>Resume analysis and extraction</li>
+                    <li>Interview question generation</li>
+                    <li>STAR method examples</li>
+                    <li>Strengths and weaknesses analysis</li>
+                    <li>Job-specific preparation</li>
+                </ul>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        if st.button("🚀 Launch Interview Prep", key="interview_prep", use_container_width=True):
+            st.session_state.selected_app = "interview_prep"
+            st.rerun()
+    
     # Additional info
     st.markdown("---")
     st.markdown("""
@@ -153,7 +185,10 @@ def main():
     **LinkedIn Call Assistant**: Ideal for sales calls, networking, and professional meetings.
     Analyze your contact's digital footprint to create personalized conversation strategies.
     
-    Both assistants use advanced AI to help you sound more informed and engaging in any conversation.
+    **Interview Preparation**: Upload your resume and get comprehensive interview preparation including practice questions, 
+    STAR method examples, and strategic talking points tailored to your experience and target job.
+    
+    All assistants use advanced AI to help you sound more informed and engaging in any conversation.
     """)
 
 if __name__ == "__main__":
